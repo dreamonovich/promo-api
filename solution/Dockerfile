@@ -1,10 +1,14 @@
-FROM python:3.12-alpine3.21
+FROM python:3.12.1-alpine3.19
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN apk add --update --no-cache --virtual .tmp-build-deps \
+    gcc libc-dev linux-headers postgresql-dev \
+    && apk add libffi-dev
+
+COPY requirements.txt requirements.txt
+RUN pip3 install -r requirements.txt
 
 COPY . .
 
-CMD [ "python", "./main.py" ]
+CMD ["sh", "-c", "python3 manage.py migrate && python3 manage.py runserver $SERVER_ADDRESS"]
