@@ -77,9 +77,7 @@ class PromocodeSerializer(WritableNestedModelSerializer):
     def get_company_name(self, obj):
         return obj.company.name
 
-    def get_active(self, obj):
-        if obj.active_until and obj.active_from:
-            return obj.active_until > obj.active_from # TODO:
+    def get_active(self, obj): # TODO:
         return True
 
     def get_like_count(self, obj):

@@ -7,6 +7,7 @@ from django.db import models
 from rest_framework import serializers
 
 from core.models import EmailPasswordUser
+from user.models import User
 
 
 def password_length_validator(value):
@@ -102,6 +103,15 @@ class Promocode(models.Model):
 
     def __str__(self):
         return str(self.uuid)
+
+class PromocodeAction(models.Model):
+    promocode = models.ForeignKey(Promocode, on_delete=models.CASCADE)
+    profile = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    type = models.CharField(max_length=10, db_index=True)
+
+    class Meta:
+        unique_together = ("promocode", "profile")
 
 
 

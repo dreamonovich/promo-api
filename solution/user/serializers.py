@@ -3,6 +3,8 @@ from collections import OrderedDict
 from django.core.validators import RegexValidator, MinLengthValidator, MaxLengthValidator
 from drf_writable_nested import WritableNestedModelSerializer
 from rest_framework import serializers
+
+from business.models import Promocode, PromocodeAction
 from .models import User, TargetInfo, password_length_validator
 
 
@@ -58,3 +60,53 @@ class FeedQueryParamSerializer(serializers.Serializer):
     offset = serializers.IntegerField(required=False)
     category = serializers.CharField(required=False)
     active = serializers.BooleanField(required=False)
+
+class PromocodeForUserSerializer(WritableNestedModelSerializer):
+    promo_id = serializers.SerializerMethodField()
+    company_id = serializers.SerializerMethodField()
+    company_name = serializers.SerializerMethodField()
+    active = serializers.SerializerMethodField()
+    like_count = serializers.SerializerMethodField()
+    is_activated_by_user = serializers.SerializerMethodField()
+    is_liked_by_user = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+
+    def get_promo_id(self, obj):
+        return obj.uuid
+
+    def get_company_id(self, obj):
+        return obj.company.uuid
+
+    def get_company_name(self, obj):
+        return obj.company.name
+
+    def get_active(self, obj): # TODO:
+        return True
+
+    def get_like_count(self, obj):
+        return PromocodeAction.objects.filter(promocode=obj, type="like").count()
+
+    def get_is_activated_by_user(self, obj):
+        return False
+
+    def get_is_liked_by_user(self, obj):
+        return False
+
+    def get_comment_count(self, obj):
+        return 0
+
+    class Meta:
+        model = Promocode
+        fields = (
+            "promo_id",
+            "company_id",
+            "company_name",
+            "description",
+            "image_url",
+            "active",
+            "is_activated_by_user",
+            "like_count",
+            "is_liked_by_user",
+            "comment_count"
+        )
+
