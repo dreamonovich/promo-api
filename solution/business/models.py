@@ -1,11 +1,13 @@
 import uuid
-from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.core.validators import MinLengthValidator, MaxLengthValidator, RegexValidator, MinValueValidator, \
+from django.core.validators import MinLengthValidator, MaxLengthValidator, MinValueValidator, \
     MaxValueValidator
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from rest_framework import serializers
+
+from core.models import EmailPasswordUser
+
 
 def password_length_validator(value):
     if len(value) > 60:
@@ -31,14 +33,24 @@ class Target(models.Model):
     )
 
 
+class Business(EmailPasswordUser):
+    name = models.CharField(
+        validators=[MinLengthValidator(5)],
+        max_length=50,
+    )
+
+    def __str__(self):
+        return f"{self.name} ({self.uuid})"
+
+
 class Promocode(models.Model):
     MODE_CHOICES = [
         ('COMMON', 'Common'),
         ('UNIQUE', 'Unique')
     ]
 
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, primary_key=True)
-    company = models.ForeignKey('Business', on_delete=models.CASCADE, related_name='promocodes')
+    uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey(Business, on_delete=models.CASCADE, related_name="promocodes")
     description = models.CharField(
         max_length=300,
         validators=[
@@ -83,36 +95,13 @@ class Promocode(models.Model):
             if not self.promo_unique or len(self.promo_unique) == 0:
                 raise serializers.ValidationError("promo_unique не может быть пустым если mode=UNIQUE.")
             self.max_count = 1
-        if self.target.age_from and self.target.age_until:
+        if self.target and self.target.age_from and self.target.age_until:
             if self.target.age_from > self.target.age_until:
                 raise serializers.ValidationError("age_from не должен превышать age_until.")
         super().save(*args, **kwargs)
 
-class Business(AbstractUser):
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, primary_key=True)
-    name = models.CharField(
-        validators=[MinLengthValidator(5)],
-        max_length=50,
-    )
-    email = models.EmailField(
-        validators=[MinLengthValidator(8)],
-        max_length=120,
-        unique=True,
-    )
-    password = models.CharField(
-        validators=[
-            MinLengthValidator(8),
-            password_length_validator,
-            RegexValidator(
-                regex=r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$"
-            )
-        ],
-        max_length=256,
-    )
-
-    username = models.CharField(max_length=120)
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["name", "password"]
+    def __str__(self):
+        return str(self.uuid)
 
 
 

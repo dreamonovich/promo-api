@@ -1,30 +1,30 @@
-import copy
+from collections import OrderedDict
 
-from django.http import QueryDict
+from django.core.validators import MinLengthValidator, RegexValidator, MaxLengthValidator
 from rest_framework import serializers
 from drf_writable_nested.serializers import WritableNestedModelSerializer
 
-from business.models import Business, Promocode, Target
+from business.models import Business, Promocode, Target, password_length_validator
 
 
-class CreateBusinessSerializer(serializers.ModelSerializer):
-    def validate(self, data):
-        password = data.get('password')
-        if password and len(password) > 60:
-            raise serializers.ValidationError({"password": "Пароль не должен превышать 60 символов."})
-        return data
-
+class RegisterBusinessSerializer(serializers.ModelSerializer):
     class Meta:
         model = Business
-        fields = ("name", "email", "password")
+        fields = ("name", "email", "password", "model_type")
+        write_only_fields = ("password", "model_type")
 
 class LoginBusinessSerializer(serializers.Serializer):
-    def validate(self, data):
-        password = data.get('password')
-        if password and len(password) > 60:
-            raise serializers.ValidationError({"password": "Пароль не должен превышать 60 символов."})
-        return data
-
+    email = serializers.EmailField(validators=[MinLengthValidator(8), MaxLengthValidator(120)])
+    password = serializers.CharField(
+        write_only=True,
+        validators=[
+            MinLengthValidator(8),
+            password_length_validator,
+            RegexValidator(
+                regex=r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$"
+            )
+        ],
+    )
     class Meta:
         model = Business
         fields = ("email", "password",)
@@ -33,29 +33,31 @@ class TargetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Target
         fields = ['age_from', 'age_until', 'country', 'categories']
+        extra_kwargs = {
+            'age_from': {'required': False, 'allow_null': True},
+            'age_until': {'required': False, 'allow_null': True},
+            'country': {'required': False, 'allow_null': True},
+            'categories': {'required': False, 'allow_null': True},
+        }
 
     def update(self, instance, validated_data):
-        instance = super().update(instance, validated_data) # NO PARTIAL UPDATE
+        instance = super().update(instance, validated_data)
         return instance
 
+    def to_representation(self, instance):
+        result = super().to_representation(instance)
+        return OrderedDict(
+            [(key, result[key]) for key in result if result[key] is not None]
+        )
+
 class CreatePromocodeSerializer(WritableNestedModelSerializer):
-    target = TargetSerializer()
+    target = TargetSerializer(required=True, allow_null=True)
 
     class Meta:
         model = Promocode
-        fields = (
-            "uuid",
-            "description",
-            "image_url",
-            "target",
-            "max_count",
-            "active_from",
-            "active_until",
-            "mode",
-            "promo_common",
-            "promo_unique",
-        )
-        read_only_fields = ("uuid",)
+        fields = '__all__'
+        read_only_fields = ("uuid", 'company', "created_at")
+
 
 class PromocodeSerializer(WritableNestedModelSerializer):
     target = TargetSerializer()
@@ -76,13 +78,21 @@ class PromocodeSerializer(WritableNestedModelSerializer):
         return obj.company.name
 
     def get_active(self, obj):
-        return obj.active_until > obj.active_from
+        if obj.active_until and obj.active_from:
+            return obj.active_until > obj.active_from # TODO:
+        return True
 
     def get_like_count(self, obj):
-        return 0
+        return 0 # TODO:
 
     def get_used_count(self, obj):
-        return 0
+        return 0 # TODO:
+
+    def to_representation(self, instance):
+        result = super().to_representation(instance)
+        return OrderedDict(
+            [(key, result[key]) for key in result if result[key] is not None]
+        )
 
     class Meta:
         model = Promocode

@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
 
     "business",
+    "user",
+    "core",
 ]
 
 MIDDLEWARE = [
@@ -75,7 +77,7 @@ WSGI_APPLICATION = 'app.wsgi.application'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'app.auth.BearerTokenAuthentication',
+        'core.models.BearerTokenAuthentication',
     ]
 }
 
@@ -116,7 +118,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-AUTH_USER_MODEL = 'business.Business'
+AUTH_USER_MODEL = 'core.EmailPasswordUser'
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/

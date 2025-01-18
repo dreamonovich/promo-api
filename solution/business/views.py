@@ -1,28 +1,27 @@
+from django.db.models import Q
+from django.db.models.functions import Lower
 from rest_framework import status
 from django.contrib.auth.hashers import make_password, check_password
-from rest_framework.generics import CreateAPIView, ListAPIView, GenericAPIView, RetrieveAPIView, RetrieveUpdateAPIView
+from rest_framework.generics import CreateAPIView, GenericAPIView, RetrieveUpdateAPIView, RetrieveAPIView
 from rest_framework.authtoken.models import Token
 from rest_framework.mixins import CreateModelMixin, ListModelMixin
-from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db import models
 from app.pagination import PureLimitOffsetPagination
-from business import serializers
 from rest_framework.serializers import ValidationError
 from business.models import Business, Promocode
-from business.permissions import IsBusinessAuthenticated, IsPromocodeOwner
-from business.serializers import CreateBusinessSerializer, LoginBusinessSerializer, CreatePromocodeSerializer, \
+from business.permissions import IsBusinessAuthenticated, IsPromocodeOwner, get_user
+from business.serializers import RegisterBusinessSerializer, LoginBusinessSerializer, CreatePromocodeSerializer, \
     PromocodeSerializer, ListPromocodesQueryParamsSerializer
 
 
 class LoginBusinessView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = LoginBusinessSerializer(data=request.data)
-        validated_data = serializer.validate(request.data)
+        serializer.is_valid(raise_exception=True)
 
-        email = validated_data['email']
-        password = validated_data['password']
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
 
         if not (business := Business.objects.filter(email=email).first()) or not check_password(password, business.password):
             return Response({
@@ -38,10 +37,12 @@ class LoginBusinessView(APIView):
         })
 
 class RegisterBusinessView(CreateAPIView):
-    serializer_class = CreateBusinessSerializer
+    serializer_class = RegisterBusinessSerializer
     def perform_create(self, serializer):
         password = serializer.validated_data['password']
         serializer.validated_data['password'] = make_password(password)
+
+        serializer.validated_data['model_type'] = "BUSINESS"
         serializer.save()
 
     def create(self, request, *args, **kwargs):
@@ -90,12 +91,14 @@ class PromocodeView(GenericAPIView, CreateModelMixin, ListModelMixin):
 
         sort_by = params.get("sort_by", "created_at")
 
-        queryset = self.request.user.promocodes.all()
+        queryset = get_user(self.request.user.uuid).promocodes.all()
 
         if country := self.request.query_params.get("country"):
-            country_list = clean_country(country)
+            country_list = [c.lower() for c in clean_country(country)]
             queryset = queryset.filter(
-                models.Q(target__isnull=True) | models.Q(target__country__in=country_list)
+                Q(target__isnull=True) | Q(target__country__in=country_list)
+            ).annotate(lower_country=Lower('target__country')).filter(
+                Q(target__isnull=True) | Q(lower_country__in=country_list)
             )
 
         return queryset.order_by(f"-{sort_by}")
@@ -104,7 +107,9 @@ class PromocodeView(GenericAPIView, CreateModelMixin, ListModelMixin):
         return self.create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
-        serializer.validated_data["company"] = self.request.user
+        uuid = self.request.user.uuid
+        serializer.validated_data["company"] = Business.objects.get(uuid=uuid)
+
         return super().perform_create(serializer)
 
     def create(self, request, *args, **kwargs):
@@ -112,18 +117,19 @@ class PromocodeView(GenericAPIView, CreateModelMixin, ListModelMixin):
         uuid = response.data.get("uuid")
         return Response({"id": uuid}, status=status.HTTP_201_CREATED)
 
-class RetrievePromocodeView(RetrieveUpdateAPIView):
+class RetrieveUpdatePromocodeView(RetrieveUpdateAPIView):
     permission_classes = (IsBusinessAuthenticated, IsPromocodeOwner)
     serializer_class = PromocodeSerializer
     queryset = Promocode.objects.all()
     lookup_field = "uuid"
     lookup_url_kwarg = "uuid"
-
+    # def get(self, request, *args, **kwargs):
+    #     return Response({"бля": (self.request.user, type(self.request.user))}, status=status.HTTP_200_OK)
     def update(self, request, *args, **kwargs):
         for field in PromocodeSerializer.Meta.read_only_fields:
             if field in request.data:
                 raise ValidationError(f"Поле '{field}' не может быть изменено.")
         return super().update(request, *args, **kwargs)
 
-
-
+class PromocodeStatisticsView(RetrieveAPIView): # TODO: Написать эту ручку после реализации Users
+    pass
