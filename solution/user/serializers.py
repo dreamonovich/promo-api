@@ -1,10 +1,10 @@
-from collections import OrderedDict
 
 from django.core.validators import RegexValidator, MinLengthValidator, MaxLengthValidator
 from drf_writable_nested import WritableNestedModelSerializer
 from rest_framework import serializers
 
-from business.models import Promocode, PromocodeAction
+from business.models import Promocode, Comment, promocode_is_active
+from core.serializers import ClearNullMixin
 from .models import User, TargetInfo, password_length_validator
 
 
@@ -36,14 +36,8 @@ class LoginUserSerializer(serializers.Serializer):
         model = User
         fields = ("email", "password",)
 
-class UserSerializer(WritableNestedModelSerializer):
+class UserSerializer(WritableNestedModelSerializer, ClearNullMixin):
     other = TargetInfoSerializer()
-
-    def to_representation(self, instance):
-        result = super().to_representation(instance)
-        return OrderedDict(
-            [(key, result[key]) for key in result if result[key] is not None]
-        )
 
     class Meta:
         model = User
@@ -80,20 +74,20 @@ class PromocodeForUserSerializer(WritableNestedModelSerializer):
     def get_company_name(self, obj):
         return obj.company.name
 
-    def get_active(self, obj): # TODO:
-        return True
+    def get_active(self, obj):
+        return promocode_is_active(obj)
 
     def get_like_count(self, obj):
-        return PromocodeAction.objects.filter(promocode=obj, type="like").count()
+        return obj.likes.count()
 
-    def get_is_activated_by_user(self, obj):
+    def get_is_activated_by_user(self, obj): # TODO:
         return False
 
     def get_is_liked_by_user(self, obj):
-        return False
+        return obj.likes.filter(user=self.context["user"]).exists()
 
     def get_comment_count(self, obj):
-        return 0
+        return obj.comments.count()
 
     class Meta:
         model = Promocode
@@ -110,3 +104,48 @@ class PromocodeForUserSerializer(WritableNestedModelSerializer):
             "comment_count"
         )
 
+class CreateCommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ("text",)
+
+class CommentUserSerializer(serializers.ModelSerializer, ClearNullMixin):
+    class Meta:
+        model = User
+        fields = (
+            "name",
+            "surname",
+            "avatar_url"
+        )
+
+class RetrieveCommentSerializer(serializers.ModelSerializer):
+    id = serializers.SerializerMethodField()
+    date = serializers.SerializerMethodField()
+    author = serializers.SerializerMethodField()
+
+    def get_author(self, obj):
+        return CommentUserSerializer(obj.user).data
+
+    def get_id(self, obj):
+        return obj.uuid
+
+    def get_date(self, obj):
+        return obj.created_at
+
+    class Meta:
+        model = Comment
+        fields = (
+            "id",
+            "text",
+            "date",
+            "author"
+        )
+
+class UpdateCommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ("text",)
+
+class ListCommentsQueryParamSerializer(serializers.Serializer):
+    limit = serializers.IntegerField(required=False)
+    offset = serializers.IntegerField(required=False)

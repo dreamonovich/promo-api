@@ -9,8 +9,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from app.pagination import PureLimitOffsetPagination
 from rest_framework.serializers import ValidationError
+
+from core.utils import is_valid_uuid
 from business.models import Business, Promocode
-from business.permissions import IsBusinessAuthenticated, IsPromocodeOwner, get_user
+from business.permissions import IsBusinessAuthenticated, IsPromocodeOwner, get_business
 from business.serializers import RegisterBusinessSerializer, LoginBusinessSerializer, CreatePromocodeSerializer, \
     PromocodeSerializer, ListPromocodesQueryParamsSerializer
 
@@ -91,7 +93,7 @@ class PromocodeView(GenericAPIView, CreateModelMixin, ListModelMixin):
 
         sort_by = params.get("sort_by", "created_at")
 
-        queryset = get_user(self.request.user.uuid).promocodes.all()
+        queryset = get_business(self.request.user.uuid).promocodes.all()
 
         if country := self.request.query_params.get("country"):
             country_list = [c.lower() for c in clean_country(country)]
@@ -123,9 +125,16 @@ class RetrieveUpdatePromocodeView(RetrieveUpdateAPIView):
     queryset = Promocode.objects.all()
     lookup_field = "uuid"
     lookup_url_kwarg = "uuid"
-    # def get(self, request, *args, **kwargs):
-    #     return Response({"бля": (self.request.user, type(self.request.user))}, status=status.HTTP_200_OK)
-    def update(self, request, *args, **kwargs):
+
+    def retrieve(self, request, uuid,*args, **kwargs):
+        if not is_valid_uuid(uuid):
+            raise ValidationError("Invalid UUID.")
+        return super().retrieve(request, uuid, *args, **kwargs)
+
+    def update(self, request, uuid, *args, **kwargs):
+        if not is_valid_uuid(uuid):
+            raise ValidationError("Invalid UUID.")
+
         for field in PromocodeSerializer.Meta.read_only_fields:
             if field in request.data:
                 raise ValidationError(f"Поле '{field}' не может быть изменено.")
@@ -133,3 +142,6 @@ class RetrieveUpdatePromocodeView(RetrieveUpdateAPIView):
 
 class PromocodeStatisticsView(RetrieveAPIView): # TODO: Написать эту ручку после реализации Users
     pass
+    # if not is_valid_uuid(uuid):
+    #     raise ValidationError
+    # return super().retrieve(request, uuid, *args, **kwargs)

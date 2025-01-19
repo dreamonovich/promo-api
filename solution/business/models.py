@@ -1,9 +1,12 @@
 import uuid
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError
 from django.core.validators import MinLengthValidator, MaxLengthValidator, MinValueValidator, \
     MaxValueValidator
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.utils import timezone
 from rest_framework import serializers
 
 from core.models import EmailPasswordUser
@@ -104,8 +107,28 @@ class Promocode(models.Model):
     def __str__(self):
         return str(self.uuid)
 
+
+def promocode_is_active(promocode, current_time=None):
+    if current_time is None:
+        current_time = timezone.now() + timedelta(hours=3)  # UTC+3
+
+    if promocode.active_from and promocode.active_from > current_time:
+        return False
+    if promocode.active_until and promocode.active_until < current_time:
+        return False
+
+    if promocode.mode == 'COMMON':
+        if promocode.max_count <= promocode.company.promocodes.count(): # TODO: wrong
+            return False
+    elif promocode.mode == 'UNIQUE':
+        if not promocode.promo_unique or len(promocode.promo_unique) == 0:
+            return False
+
+    return True
+
+
 class PromocodeAction(models.Model):
-    promocode = models.ForeignKey(Promocode, on_delete=models.CASCADE)
+    promocode = models.ForeignKey(Promocode, on_delete=models.CASCADE, related_name="likes")
     profile = models.ForeignKey(User, on_delete=models.CASCADE)
 
     type = models.CharField(max_length=10, db_index=True)
@@ -113,6 +136,16 @@ class PromocodeAction(models.Model):
     class Meta:
         unique_together = ("promocode", "profile")
 
+class Comment(models.Model):
+    uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
+    promocode = models.ForeignKey(Promocode, on_delete=models.CASCADE, related_name="comments")
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    text = models.CharField(validators=[MinLengthValidator(10), MaxLengthValidator(1000)], max_length=1000)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return str(self.uuid)
 
 
 

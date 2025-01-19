@@ -16,7 +16,7 @@ services:
   antifraud:
     image: lodthe/prod-backend-antifraud:latest
     container_name: antifraud
-    ports: [ "9090:5195" ]
+    ports: [ "9090:9000" ]
     environment:
       SERVER_PORT: 9000
       CACHE_DURATION_MS: 5000

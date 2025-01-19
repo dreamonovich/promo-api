@@ -1,10 +1,10 @@
-from collections import OrderedDict
 
 from django.core.validators import MinLengthValidator, RegexValidator, MaxLengthValidator
 from rest_framework import serializers
 from drf_writable_nested.serializers import WritableNestedModelSerializer
 
-from business.models import Business, Promocode, Target, password_length_validator
+from business.models import Business, Promocode, Target, password_length_validator, promocode_is_active
+from core.serializers import ClearNullMixin
 
 
 class RegisterBusinessSerializer(serializers.ModelSerializer):
@@ -29,7 +29,7 @@ class LoginBusinessSerializer(serializers.Serializer):
         model = Business
         fields = ("email", "password",)
 
-class TargetSerializer(serializers.ModelSerializer):
+class TargetSerializer(serializers.ModelSerializer, ClearNullMixin):
     class Meta:
         model = Target
         fields = ['age_from', 'age_until', 'country', 'categories']
@@ -44,12 +44,6 @@ class TargetSerializer(serializers.ModelSerializer):
         instance = super().update(instance, validated_data)
         return instance
 
-    def to_representation(self, instance):
-        result = super().to_representation(instance)
-        return OrderedDict(
-            [(key, result[key]) for key in result if result[key] is not None]
-        )
-
 class CreatePromocodeSerializer(WritableNestedModelSerializer):
     target = TargetSerializer(required=True, allow_null=True)
 
@@ -59,7 +53,7 @@ class CreatePromocodeSerializer(WritableNestedModelSerializer):
         read_only_fields = ("uuid", 'company', "created_at")
 
 
-class PromocodeSerializer(WritableNestedModelSerializer):
+class PromocodeSerializer(WritableNestedModelSerializer, ClearNullMixin):
     target = TargetSerializer()
     promo_id = serializers.SerializerMethodField()
     company_id = serializers.SerializerMethodField()
@@ -77,20 +71,14 @@ class PromocodeSerializer(WritableNestedModelSerializer):
     def get_company_name(self, obj):
         return obj.company.name
 
-    def get_active(self, obj): # TODO:
-        return True
+    def get_active(self, obj):
+        return promocode_is_active(obj)
 
     def get_like_count(self, obj):
-        return 0 # TODO:
+        return obj.likes.count()
 
     def get_used_count(self, obj):
         return 0 # TODO:
-
-    def to_representation(self, instance):
-        result = super().to_representation(instance)
-        return OrderedDict(
-            [(key, result[key]) for key in result if result[key] is not None]
-        )
 
     class Meta:
         model = Promocode

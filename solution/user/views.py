@@ -4,17 +4,20 @@ from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
 from rest_framework import status
 from rest_framework.authtoken.models import Token
-from rest_framework.exceptions import NotFound
-from rest_framework.generics import CreateAPIView, ListAPIView, RetrieveAPIView
+from rest_framework.exceptions import NotFound, ValidationError, PermissionDenied
+from rest_framework.generics import CreateAPIView, ListAPIView, RetrieveAPIView, GenericAPIView
+from rest_framework.mixins import CreateModelMixin, ListModelMixin
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from app.pagination import PureLimitOffsetPagination
-from business.models import Promocode, PromocodeAction
+from core.utils import is_valid_uuid
+from business.models import Promocode, PromocodeAction, Comment
 from .models import User
-from .permissions import IsUserAuthenticated, get_user
+from .permissions import IsUserAuthenticated, get_user, IsCommentOwner
 from .serializers import RegisterUserSerializer, LoginUserSerializer, UserSerializer, UpdateUserSerializer, \
-    FeedQueryParamSerializer, PromocodeForUserSerializer
+    FeedQueryParamSerializer, PromocodeForUserSerializer, CreateCommentSerializer, RetrieveCommentSerializer, \
+    UpdateCommentSerializer
 
 
 class LoginUserView(APIView):
@@ -99,6 +102,11 @@ class FeedView(ListAPIView):
     pagination_class = PureLimitOffsetPagination
     serializer_class = PromocodeForUserSerializer
 
+    def get_serializer_context(self): # for is_liked_by_user
+        context = super().get_serializer_context()
+        context.update({"user": get_user(self.request.user.uuid)})
+        return context
+
     def get(self, request, *args, **kwargs):
         return self.list(request, *args, **kwargs)
 
@@ -148,6 +156,16 @@ class RetrievePromocodeForUserView(RetrieveAPIView):
     lookup_field = "uuid"
     lookup_url_kwarg = "uuid"
 
+    def get_serializer_context(self): # for is_liked_by_user
+        context = super().get_serializer_context()
+        context.update({"user": get_user(self.request.user.uuid)})
+        return context
+
+    def retrieve(self, request, uuid, *args, **kwargs):
+        if not is_valid_uuid(uuid):
+            raise ValidationError("Invalid UUID.")
+        return super().retrieve(request, uuid, *args, **kwargs)
+
 class LikePromocodeView(CreateAPIView):
     permission_classes = (IsUserAuthenticated,)
 
@@ -162,11 +180,13 @@ class LikePromocodeView(CreateAPIView):
             PromocodeAction.objects.create(profile=user, promocode=promocode, type=self.action_type)
 
     def get(self, request, uuid, *args, **kwargs) -> Response:
+        if not is_valid_uuid(uuid):
+            raise ValidationError("Invalid UUID.")
 
         if not (
             promocode := Promocode.objects.filter(uuid=uuid).first()
         ):
-            raise NotFound(f"{uuid}")
+            raise NotFound("Промокод не найден.")
 
         self.action(get_user(self.request.user.uuid), promocode)
 
@@ -177,10 +197,13 @@ class LikePromocodeView(CreateAPIView):
         )
 
     def delete(self, request, uuid, *args, **kwargs) -> Response:
+        if not is_valid_uuid(uuid):
+            raise ValidationError("Invalid UUID.")
+
         if not (
                 promocode := Promocode.objects.filter(uuid=uuid).first()
         ):
-            raise NotFound(f"{uuid}")
+            raise NotFound("Промокод не найден.")
 
         PromocodeAction.objects.filter(profile=get_user(self.request.user.uuid), promocode=promocode).delete()
 
@@ -190,4 +213,104 @@ class LikePromocodeView(CreateAPIView):
             }
         )
 
+class CreateListCommentView(GenericAPIView, CreateModelMixin, ListModelMixin):
+    permission_classes = (IsUserAuthenticated,)
+    pagination_class = PureLimitOffsetPagination
+    serializer_class = RetrieveCommentSerializer
 
+    def get(self, request, *args, **kwargs) -> Response:
+        return self.list(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+
+    def create(self, request, uuid, *args, **kwargs):
+        if not is_valid_uuid(uuid):
+            raise ValidationError("Invalid UUID.")
+
+        if not (
+            promocode := Promocode.objects.filter(uuid=uuid).first()
+        ):
+            raise NotFound("Промокод не найден.")
+
+        serializer = CreateCommentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        comment = Comment.objects.create(
+            user=get_user(self.request.user.uuid),
+            promocode=promocode,
+            text=serializer.validated_data['text'],
+        )
+
+        response_data = RetrieveCommentSerializer(comment).data
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
+    def get_queryset(self):
+        uuid = self.kwargs.get("uuid")
+        if not is_valid_uuid(uuid):
+            raise ValidationError("Invalid UUID.")
+
+        params_serializer = FeedQueryParamSerializer(data=self.request.query_params)
+        params_serializer.is_valid(raise_exception=True)
+
+
+        if not (queryset := Comment.objects.filter(promocode__uuid=uuid)):
+            raise NotFound("Промокод не найден.")
+
+        return queryset.order_by("-created_at")
+
+class RetrieveUpdateDeleteCommentView(APIView):
+    permission_classes = (IsUserAuthenticated, IsCommentOwner,)
+
+    def get(self, request, *args, **kwargs):
+        promo_uuid = self.kwargs.get("promo_uuid")
+        comment_uuid = self.kwargs.get("comment_uuid") #TODO: мб сунуть это куда-то
+
+        if not is_valid_uuid(promo_uuid, comment_uuid):
+            raise ValidationError("Invalid UUID.")
+
+        if not (comment := Comment.objects.filter(promocode__uuid=promo_uuid, uuid=comment_uuid).first()):
+            raise NotFound("Комментарий не найден.")
+        response_data = RetrieveCommentSerializer(comment).data
+        return Response(response_data)
+
+    def put(self, request, *args, **kwargs):
+        promo_uuid = self.kwargs.get("promo_uuid")
+        comment_uuid = self.kwargs.get("comment_uuid")
+
+        if not is_valid_uuid(promo_uuid, comment_uuid):
+            raise ValidationError("Invalid UUID.")
+
+        if not (comment := Comment.objects.filter(promocode__uuid=promo_uuid, uuid=comment_uuid).first()):
+            raise NotFound("Комментарий не найден.")
+
+        if not comment.user == get_user(self.request.user.uuid):
+            raise PermissionDenied("Низя")
+
+        serialier = UpdateCommentSerializer(data=request.data)
+        serialier.is_valid(raise_exception=True)
+
+        comment.text = serialier.validated_data['text']
+        comment.save()
+
+        response_data = RetrieveCommentSerializer(comment).data
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    def delete(self, request, *args, **kwargs):
+        promo_uuid = self.kwargs.get("promo_uuid")
+        comment_uuid = self.kwargs.get("comment_uuid")
+
+        if not is_valid_uuid(promo_uuid, comment_uuid):
+            raise ValidationError("Invalid UUID.")
+
+        if not (comment := Comment.objects.filter(promocode__uuid=promo_uuid, uuid=comment_uuid).first()):
+            raise NotFound("Комментарий не найден.")
+
+        if not comment.user == get_user(self.request.user.uuid):
+            raise PermissionDenied("Низя")
+
+        comment.delete()
+
+        return Response(
+            {"status": "ok"}
+        )

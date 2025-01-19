@@ -1,7 +1,7 @@
 from rest_framework.permissions import BasePermission
 from .models import Business
 
-def get_user(uuid):
+def get_business(uuid):
     return Business.objects.get(uuid=uuid)
 
 class IsBusinessAuthenticated(BasePermission):
@@ -12,4 +12,4 @@ class IsBusinessAuthenticated(BasePermission):
 class IsPromocodeOwner(BasePermission):
 
     def has_object_permission(self, request, view, obj):
-        return obj.company == get_user(request.user.uuid)
+        return obj.company == get_business(request.user.uuid)
