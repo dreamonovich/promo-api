@@ -1,8 +1,8 @@
 from django.db.models import Q
-from django.db.models.functions import Lower
 from rest_framework import status
 from django.contrib.auth.hashers import make_password, check_password
-from rest_framework.generics import CreateAPIView, GenericAPIView, RetrieveUpdateAPIView, RetrieveAPIView
+from rest_framework.exceptions import NotFound
+from rest_framework.generics import CreateAPIView, GenericAPIView, RetrieveUpdateAPIView
 from rest_framework.authtoken.models import Token
 from rest_framework.mixins import CreateModelMixin, ListModelMixin
 from rest_framework.response import Response
@@ -14,7 +14,7 @@ from core.utils import is_valid_uuid
 from business.models import Business, Promocode
 from business.permissions import IsBusinessAuthenticated, IsPromocodeOwner, get_business
 from business.serializers import RegisterBusinessSerializer, LoginBusinessSerializer, CreatePromocodeSerializer, \
-    PromocodeSerializer, ListPromocodesQueryParamsSerializer
+    PromocodeSerializer, ListPromocodesQueryParamsSerializer, PromocodeStatSeriazlier
 
 
 class LoginBusinessView(APIView):
@@ -74,7 +74,7 @@ def clean_country(country) -> list[str]:
 
     return country
 
-class PromocodeView(GenericAPIView, CreateModelMixin, ListModelMixin):
+class PromocodeCreateListView(GenericAPIView, CreateModelMixin, ListModelMixin):
     permission_classes = (IsBusinessAuthenticated,)
     pagination_class = PureLimitOffsetPagination
 
@@ -82,6 +82,9 @@ class PromocodeView(GenericAPIView, CreateModelMixin, ListModelMixin):
         if self.request.method == 'POST':
             return CreatePromocodeSerializer
         return PromocodeSerializer
+
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
 
     def get(self, request, *args, **kwargs):
         return self.list(request, *args, **kwargs)
@@ -91,22 +94,20 @@ class PromocodeView(GenericAPIView, CreateModelMixin, ListModelMixin):
         params_serializer.is_valid(raise_exception=True)
         params = params_serializer.validated_data
 
+
         sort_by = params.get("sort_by", "created_at")
 
         queryset = get_business(self.request.user.uuid).promocodes.all()
 
         if country := self.request.query_params.get("country"):
-            country_list = [c.lower() for c in clean_country(country)]
-            queryset = queryset.filter(
-                Q(target__isnull=True) | Q(target__country__in=country_list)
-            ).annotate(lower_country=Lower('target__country')).filter(
-                Q(target__isnull=True) | Q(lower_country__in=country_list)
-            )
+            country_list = clean_country(country)
+            country_filters = Q(target__isnull=True)
+            for country in country_list:
+                country_filters |= Q(target__country__iexact=country)
+
+            queryset = queryset.filter(country_filters)
 
         return queryset.order_by(f"-{sort_by}")
-
-    def post(self, request, *args, **kwargs):
-        return self.create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         uuid = self.request.user.uuid
@@ -116,11 +117,11 @@ class PromocodeView(GenericAPIView, CreateModelMixin, ListModelMixin):
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
-        uuid = response.data.get("uuid")
+        uuid = response.data["uuid"]
         return Response({"id": uuid}, status=status.HTTP_201_CREATED)
 
 class RetrieveUpdatePromocodeView(RetrieveUpdateAPIView):
-    permission_classes = (IsBusinessAuthenticated, IsPromocodeOwner)
+    permission_classes = (IsBusinessAuthenticated, IsPromocodeOwner,)
     serializer_class = PromocodeSerializer
     queryset = Promocode.objects.all()
     lookup_field = "uuid"
@@ -140,8 +141,16 @@ class RetrieveUpdatePromocodeView(RetrieveUpdateAPIView):
                 raise ValidationError(f"Поле '{field}' не может быть изменено.")
         return super().update(request, *args, **kwargs)
 
-class PromocodeStatisticsView(RetrieveAPIView): # TODO: Написать эту ручку после реализации Users
-    pass
-    # if not is_valid_uuid(uuid):
-    #     raise ValidationError
-    # return super().retrieve(request, uuid, *args, **kwargs)
+class PromocodeStatisticsView(APIView):
+    permission_classes = (IsBusinessAuthenticated, IsPromocodeOwner,)
+
+    def get(self, request, *args, **kwargs):
+        uuid = self.kwargs["uuid"]
+        if not is_valid_uuid(uuid):
+            raise ValidationError("Invalid UUID.")
+
+        if not (promocode := Promocode.objects.filter(uuid=uuid).first()):
+            raise NotFound("Промокод не надйен.")
+
+        response_data = PromocodeStatSeriazlier(promocode).data
+        return Response(response_data)

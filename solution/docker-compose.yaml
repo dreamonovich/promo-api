@@ -28,6 +28,7 @@ services:
     ports: [ "8080:8000" ]
     environment:
       PYTHONUNBUFFERED: "1"
+      SERVER_PORT: "8080"
       SERVER_ADDRESS: "0.0.0.0:8000"
       POSTGRES_USERNAME: "postgres"
       POSTGRES_PASSWORD: "postgres"
@@ -36,13 +37,27 @@ services:
       POSTGRES_DATABASE: "promo"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
-      ANTIFRAUD_ADDRESS: "localhost:9090"
+      ANTIFRAUD_ADDRESS: "antifraud:9000"
     volumes:
       - .:/app/
     depends_on:
       - db
 
+  redis:
+    image: redis:latest
+    container_name: promo_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: redis-server --save "" --appendonly no
+    volumes:
+      - redis_data:/data
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+
 
 
 volumes:
   postgres-data:
+  redis_data:
+    driver: local

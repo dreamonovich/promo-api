@@ -1,9 +1,9 @@
-
 from django.core.validators import RegexValidator, MinLengthValidator, MaxLengthValidator
 from drf_writable_nested import WritableNestedModelSerializer
 from rest_framework import serializers
 
-from business.models import Promocode, Comment, promocode_is_active
+from business.models import Promocode, Comment, promocode_is_active, PromocodeUniqueActivation, \
+    PromocodeCommonActivation
 from core.serializers import ClearNullMixin
 from .models import User, TargetInfo, password_length_validator
 
@@ -50,10 +50,10 @@ class UpdateUserSerializer(serializers.ModelSerializer):
         fields = ("name", "surname", "avatar_url", "password")
 
 class FeedQueryParamSerializer(serializers.Serializer):
-    limit = serializers.IntegerField(required=False)
-    offset = serializers.IntegerField(required=False)
-    category = serializers.CharField(required=False)
-    active = serializers.BooleanField(required=False)
+    limit = serializers.IntegerField(required=False, allow_null=True)
+    offset = serializers.IntegerField(required=False, allow_null=True)
+    category = serializers.CharField(required=False, allow_null=True)
+    active = serializers.BooleanField(required=False, allow_null=True)
 
 class PromocodeForUserSerializer(WritableNestedModelSerializer):
     promo_id = serializers.SerializerMethodField()
@@ -80,8 +80,12 @@ class PromocodeForUserSerializer(WritableNestedModelSerializer):
     def get_like_count(self, obj):
         return obj.likes.count()
 
-    def get_is_activated_by_user(self, obj): # TODO:
-        return False
+    def get_is_activated_by_user(self, obj):
+        user = self.context["user"]
+        is_common_activated = PromocodeCommonActivation.objects.filter(user=user, promocode_instanse__promocode_set=obj).exists()
+        is_unique_activated = PromocodeUniqueActivation.objects.filter(user=user, promocode_instanse__promocode_set=obj).exists()
+
+        return is_common_activated or is_unique_activated
 
     def get_is_liked_by_user(self, obj):
         return obj.likes.filter(user=self.context["user"]).exists()
@@ -130,7 +134,7 @@ class RetrieveCommentSerializer(serializers.ModelSerializer):
         return obj.uuid
 
     def get_date(self, obj):
-        return obj.created_at
+        return obj.created_at.strftime('%Y-%m-%dT%H:%M:%S') + "Z03:00"
 
     class Meta:
         model = Comment
@@ -149,3 +153,7 @@ class UpdateCommentSerializer(serializers.ModelSerializer):
 class ListCommentsQueryParamSerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False)
     offset = serializers.IntegerField(required=False)
+
+class HistoryQueryParamSerializer(serializers.Serializer):
+    limit = serializers.IntegerField(required=False, allow_null=True)
+    offset = serializers.IntegerField(required=False, allow_null=True)

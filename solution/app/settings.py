@@ -141,3 +141,7 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+ANTIFRAUD_ADDRESS = environ.get("ANTIFRAUD_ADDRESS")
+REDIS_HOST = environ.get("REDIS_HOST", "redis")
+REDIS_PORT = environ.get("REDIS_PORT", 6379)
