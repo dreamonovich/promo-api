@@ -5,6 +5,7 @@ cffi==1.17.1
 charset-normalizer==3.4.1
 cryptography==44.0.0
 Django==5.1.5
+django-countries==7.6.1
 django-rest-framework==0.1.0
 django-rest-knox==5.0.2
 djangorestframework==3.15.2

@@ -11,7 +11,7 @@ def password_length_validator(value):
 
 class TargetInfo(models.Model):
     age = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(100)])
-    country = models.CharField(max_length=2) # TODO: валидация по ISO 3166-1 alpha-2
+    country = models.CharField(max_length=2)
 
 class User(EmailPasswordUser):
     name = models.CharField(validators=[MinLengthValidator(1), MaxLengthValidator(100)], max_length=100)

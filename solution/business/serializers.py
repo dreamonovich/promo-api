@@ -7,6 +7,7 @@ from drf_writable_nested.serializers import WritableNestedModelSerializer
 from business.models import Business, Promocode, Target, password_length_validator, promocode_is_active, \
     PromocodeCommonInstance, PromocodeUniqueInstance, PromocodeUniqueActivation, PromocodeCommonActivation
 from core.serializers import ClearNullMixin
+from core.utils import validate_country_code
 
 
 class RegisterBusinessSerializer(serializers.ModelSerializer):
@@ -49,6 +50,11 @@ class TargetSerializer(serializers.ModelSerializer, ClearNullMixin):
         instance = super().update(instance, validated_data)
         return instance
 
+    def validate(self, data):
+        country = data.get('country', '')
+        validate_country_code(country)
+        return super().validate(data)
+
 
 class CreatePromocodeSerializer(WritableNestedModelSerializer):
     target = TargetSerializer(required=True, allow_null=True)
@@ -83,10 +89,13 @@ class CreatePromocodeSerializer(WritableNestedModelSerializer):
             raise serializers.ValidationError({"promo_common": "promo_common не может быть пустым, если mode=COMMON."})
 
         if mode == 'UNIQUE':
-            if not promo_unique or len(promo_unique) == 0:
+            if not promo_unique or len(promo_unique) == 0 or len(promo_unique) > 5000:
                 raise serializers.ValidationError(
-                    {"promo_unique": "promo_unique не может быть пустым, если mode=UNIQUE."})
-            data['max_count'] = len(promo_unique)
+                    {"promo_unique": "promo_unique не может быть пустым или быть длиннее 5000, если mode=UNIQUE."})
+            if data["max_count"] != 1:
+                raise serializers.ValidationError(
+                    {"max_count": "При mode=UNIQUE max_count может быть только 1."}
+                )
 
         return data
 
@@ -211,6 +220,9 @@ class ListPromocodesQueryParamsSerializer(serializers.Serializer):
         default="created_at",
         required=False
     )
+
+    def validate_country(self, country):
+        validate_country_code(country)
 
 
 class PromocodeStatSeriazlier(serializers.ModelSerializer):

@@ -29,7 +29,7 @@ class Target(models.Model):
         blank=True,
         null=True,
     )
-    country = models.CharField(max_length=2, blank=True, null=True) # TODO: валидация по ISO 3166-1 alpha-2
+    country = models.CharField(max_length=2, blank=True, null=True)
     categories = ArrayField(
         models.CharField(validators=[MinLengthValidator(2), MaxLengthValidator(20)], max_length=20),
         max_length=20,
@@ -100,7 +100,7 @@ class PromocodeCommonInstance(models.Model):
 class PromocodeUniqueInstance(models.Model):
     promocode = models.CharField(
         max_length=30,
-        validators=[MinLengthValidator(5), MaxLengthValidator(30)],
+        validators=[MinLengthValidator(3), MaxLengthValidator(30)],
     )
     is_activated = models.BooleanField(default=False)
     promocode_set = models.ForeignKey('Promocode', on_delete=models.CASCADE, related_name='unique_codes')

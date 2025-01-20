@@ -5,6 +5,7 @@ from rest_framework import serializers
 from business.models import Promocode, Comment, promocode_is_active, PromocodeUniqueActivation, \
     PromocodeCommonActivation
 from core.serializers import ClearNullMixin
+from core.utils import validate_country_code
 from .models import User, TargetInfo, password_length_validator
 
 
@@ -12,6 +13,11 @@ class TargetInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = TargetInfo
         fields = ("age", "country",)
+
+    def validate(self, data):
+        country = data.get('country', '')
+        validate_country_code(country)
+        return super().validate(data)
 
 class RegisterUserSerializer(WritableNestedModelSerializer):
     other = TargetInfoSerializer()
