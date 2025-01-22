@@ -12,6 +12,8 @@ def is_valid_uuid(*uuid_list) -> bool:
         return False
 
 
-def validate_country_code(country: str):
+def validate_country_code(country):
+    if not isinstance(country, str):
+        raise ValidationError("not valid country")
     if country.upper() not in dict(countries):
         raise ValidationError(f'{country} is not a valid ISO 3166-1 alpha-2 country code')

@@ -15,8 +15,8 @@ class TargetInfoSerializer(serializers.ModelSerializer):
         fields = ("age", "country",)
 
     def validate(self, data):
-        country = data.get('country', '')
-        validate_country_code(country)
+        if (country := data.get('country')) is not None:
+            validate_country_code(country)
         return super().validate(data)
 
 class RegisterUserSerializer(WritableNestedModelSerializer):

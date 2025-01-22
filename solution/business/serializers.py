@@ -32,7 +32,7 @@ class LoginBusinessSerializer(serializers.Serializer):
 
     class Meta:
         model = Business
-        fields = ("email", "password",)
+        fields = ("email", "password",) # TODO delete
 
 
 class TargetSerializer(serializers.ModelSerializer, ClearNullMixin):
@@ -51,8 +51,11 @@ class TargetSerializer(serializers.ModelSerializer, ClearNullMixin):
         return instance
 
     def validate(self, data):
-        country = data.get('country', '')
-        validate_country_code(country)
+        if (country := data.get('country')) is not None:
+            validate_country_code(country)
+        if (category := data.get('categories')) is not None:
+            if len(category) > 20:
+                raise serializers.ValidationError("len(category) > 20")
         return super().validate(data)
 
 
@@ -85,6 +88,17 @@ class CreatePromocodeSerializer(WritableNestedModelSerializer):
         promo_common = data.get('promo_common')
         promo_unique = data.get('promo_unique')
 
+        active_from = data.get('active_from')
+        active_until = data.get('active_until')
+        if active_from and active_until and active_until < active_from:
+            raise serializers.ValidationError("active_until < active_from")
+
+        if mode=="COMMON" and promo_unique:
+            raise serializers.ValidationError({"promo_unique": "promo_unique не должно быть при mode=COMMON"})
+
+        if mode=="UNIQUE" and promo_common:
+            raise serializers.ValidationError({"promo_common": "promo_common не должно быть при mode=UNIQUE"})
+
         if mode == 'COMMON' and not promo_common:
             raise serializers.ValidationError({"promo_common": "promo_common не может быть пустым, если mode=COMMON."})
 
@@ -97,12 +111,12 @@ class CreatePromocodeSerializer(WritableNestedModelSerializer):
                     {"max_count": "При mode=UNIQUE max_count может быть только 1."}
                 )
 
-        return data
+        return super().validate(data)
 
     def create(self, validated_data):
         target_data = validated_data.pop('target')
         promo_common = validated_data.pop('promo_common', None)
-        promo_unique_list = validated_data.pop('promo_unique', [])
+        promo_unique_list = validated_data.pop('promo_unique', None)
 
         if target_data:
             target_instance = Target.objects.create(**target_data)
@@ -163,20 +177,28 @@ class PromocodeSerializer(WritableNestedModelSerializer, ClearNullMixin):
     def get_like_count(self, obj):
         return obj.likes.count()
 
+    def get_promo_common(self, obj):
+        if obj.mode == "COMMON":
+            return obj.common_code.first().promocode
+        return None
+
     def get_used_count(self, obj):
         return obj.common_activations_count + obj.unique_activations_count
 
-    def get_promo_common(self, obj):
-        return list(obj.common_code.values_list('promocode', flat=True))
-
     def get_promo_unique(self, obj):
-        return list(obj.unique_codes.values_list('promocode', flat=True))
+        if obj.mode == "UNIQUE":
+            return list(obj.unique_codes.values_list('promocode', flat=True))
+        return None
 
     def get_active_from(self, obj):
-        return obj.active_from.date()
+        if obj.active_from:
+            return obj.active_from.date()
+        return None
 
     def get_active_until(self, obj):
-        return obj.active_until.date()
+        if obj.active_until:
+            return obj.active_until.date()
+        return None
 
     class Meta:
         model = Promocode

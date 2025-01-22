@@ -170,7 +170,7 @@ class RetrievePromocodeForUserView(RetrieveAPIView):
         return super().retrieve(request, uuid, *args, **kwargs)
 
 
-class LikePromocodeView(CreateAPIView):
+class LikePromocodeView(APIView):
     permission_classes = (IsUserAuthenticated,)
 
     action_type = "like"
@@ -183,7 +183,7 @@ class LikePromocodeView(CreateAPIView):
             action_qs.delete()
             PromocodeAction.objects.create(user=user, promocode=promocode, type=self.action_type)
 
-    def get(self, request, uuid, *args, **kwargs) -> Response:
+    def post(self, request, uuid, *args, **kwargs) -> Response:
         if not is_valid_uuid(uuid):
             raise ValidationError("Invalid UUID.")
 
@@ -258,8 +258,10 @@ class CreateListCommentView(GenericAPIView, CreateModelMixin, ListModelMixin):
         params_serializer = FeedQueryParamSerializer(data=self.request.query_params)
         params_serializer.is_valid(raise_exception=True)
 
-        if not (queryset := Comment.objects.filter(promocode__uuid=uuid)):
+        if not Promocode.objects.filter(uuid=uuid).exists():
             raise NotFound("Промокод не найден.")
+
+        queryset = Comment.objects.filter(promocode__uuid=uuid)
 
         return queryset.order_by("-created_at")
 
