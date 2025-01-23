@@ -101,7 +101,7 @@ class PromocodeCreateListView(GenericAPIView, CreateModelMixin, ListModelMixin):
 
         if country := self.request.query_params.get("country"):
             country_list = clean_country(country)
-            country_filters = Q(target__isnull=True)
+            country_filters = Q(target__country__isnull=True)
             for country in country_list:
                 country_filters |= Q(target__country__iexact=country)
 
