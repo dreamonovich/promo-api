@@ -90,20 +90,20 @@ class CreatePromocodeSerializer(WritableNestedModelSerializer):
 
         active_from = data.get('active_from')
         active_until = data.get('active_until')
-        if active_from and active_until and active_until < active_from:
+        if active_from is not None and active_until is not None and active_until < active_from:
             raise serializers.ValidationError("active_until < active_from")
 
-        if mode=="COMMON" and promo_unique:
+        if mode=="COMMON" and promo_unique is not None:
             raise serializers.ValidationError({"promo_unique": "promo_unique не должно быть при mode=COMMON"})
 
-        if mode=="UNIQUE" and promo_common:
+        if mode=="UNIQUE" and promo_common is not None:
             raise serializers.ValidationError({"promo_common": "promo_common не должно быть при mode=UNIQUE"})
 
-        if mode == 'COMMON' and not promo_common:
+        if mode == 'COMMON' and not promo_common is not None:
             raise serializers.ValidationError({"promo_common": "promo_common не может быть пустым, если mode=COMMON."})
 
         if mode == 'UNIQUE':
-            if not promo_unique or len(promo_unique) == 0 or len(promo_unique) > 5000:
+            if promo_unique is None or len(promo_unique) == 0 or len(promo_unique) > 5000:
                 raise serializers.ValidationError(
                     {"promo_unique": "promo_unique не может быть пустым или быть длиннее 5000, если mode=UNIQUE."})
             if data["max_count"] != 1:
@@ -118,20 +118,20 @@ class CreatePromocodeSerializer(WritableNestedModelSerializer):
         promo_common = validated_data.pop('promo_common', None)
         promo_unique_list = validated_data.pop('promo_unique', None)
 
-        if target_data:
+        if target_data is not None:
             target_instance = Target.objects.create(**target_data)
             validated_data['target'] = target_instance
 
         promocode_set = Promocode.objects.create(**validated_data)
 
-        if promo_common:
+        if promo_common is not None:
             promocode_set.common_count = promocode_set.max_count
             PromocodeCommonInstance.objects.create(
                 promocode=promo_common,
                 promocode_set=promocode_set
             )
 
-        if promo_unique_list:
+        if promo_unique_list is not None:
             promocode_set.unique_count = len(promo_unique_list)
             unique_codes = [
                 PromocodeUniqueInstance(promocode=code, promocode_set=promocode_set)
@@ -160,7 +160,10 @@ class PromocodeSerializer(WritableNestedModelSerializer, ClearNullMixin):
     promo_common = serializers.SerializerMethodField()
     promo_unique = serializers.SerializerMethodField()
     active_from = serializers.SerializerMethodField()
-    active_until = serializers.SerializerMethodField()
+    active_until = serializers.DateTimeField(format="%Y-%m-%d", input_formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"], required=False)
+    active_from = serializers.DateTimeField(format="%Y-%m-%d", input_formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
+                                             required=False)
+
 
     def get_promo_id(self, obj):
         return obj.uuid
@@ -190,15 +193,11 @@ class PromocodeSerializer(WritableNestedModelSerializer, ClearNullMixin):
             return list(obj.unique_codes.values_list('promocode', flat=True))
         return None
 
-    def get_active_from(self, obj):
-        if obj.active_from:
-            return obj.active_from.date()
-        return None
-
     def get_active_until(self, obj):
-        if obj.active_until:
-            return obj.active_until.date()
-        return None
+        return obj.active_until.date() if obj.active_until else None
+
+    def get_active_from(self, obj):
+        return obj.active_from.date() if obj.active_from else None
 
     class Meta:
         model = Promocode
@@ -232,6 +231,14 @@ class PromocodeSerializer(WritableNestedModelSerializer, ClearNullMixin):
             "active",
         )
 
+    def update(self, instance, validated_data):
+        if 'active_until' in validated_data:
+            instance.active_until = validated_data['active_until']
+        if 'active_from' in validated_data:
+            instance.active_until = validated_data['active_from']
+        instance.save()
+        return super().update(instance, validated_data)
+
 
 class ListPromocodesQueryParamsSerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False)
@@ -264,9 +271,9 @@ class PromocodeStatSeriazlier(serializers.ModelSerializer):
 
         for activation in activations:
             country = activation.user.other.country
-            country_activation_count[country] += 1
+            country_activation_count[country.lower()] += 1
 
-        countries_list = [{"country": country, "activations_count": count} for country, count in
+        countries_list = [{"country": country.lower(), "activations_count": count} for country, count in
                           country_activation_count.items()]
 
         countries_list.sort(key=lambda x: x["country"].lower())
