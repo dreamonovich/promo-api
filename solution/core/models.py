@@ -16,7 +16,7 @@ def password_length_validator(value):
 
 class EmailPasswordUser(AbstractUser):
     uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(validators=[MinLengthValidator(8), MaxLengthValidator(120)])
+    email = models.EmailField(validators=[MinLengthValidator(8), MaxLengthValidator(120)], max_length=120)
     password = models.CharField(
         validators=[
             MinLengthValidator(8),

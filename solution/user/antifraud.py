@@ -10,7 +10,7 @@ redis_conn = redis.Redis(
     host=REDIS_HOST,
     port=REDIS_PORT
 )
-
+# TODO редиска при перезагрузке сбросится
 def _get_user_cached_info(user_email: str) -> dict: # utc time
     user_cached_info = {}
     if byted_user_cached_info := redis_conn.get(user_email):
@@ -45,7 +45,7 @@ def antifraud_success(user_email: str, promocode_uuid: str) -> bool:
     cache_until = cached_info.get("cache_until")
     success = cached_info.get("success")
 
-    if cached_info and not _is_cache_until_passed(cache_until):
+    if cached_info is not None and not _is_cache_until_passed(cache_until):
         return success
 
     antifraud_response = _get_antifraud_response(user_email, promocode_uuid)
@@ -57,7 +57,7 @@ def antifraud_success(user_email: str, promocode_uuid: str) -> bool:
     success = antifraud_response_data.get("ok")
     cache_until = antifraud_response_data.get("cache_until")
 
-    if cache_until:
+    if cache_until is not None:
         _set_user_cached_info(user_email, cache_until, success)
 
     return success

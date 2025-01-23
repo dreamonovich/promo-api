@@ -1,3 +1,5 @@
+from copy import copy
+
 from django.core.validators import RegexValidator, MinLengthValidator, MaxLengthValidator
 from drf_writable_nested import WritableNestedModelSerializer
 from rest_framework import serializers
@@ -140,7 +142,7 @@ class RetrieveCommentSerializer(serializers.ModelSerializer):
         return obj.uuid
 
     def get_date(self, obj):
-        return obj.created_at.strftime('%Y-%m-%dT%H:%M:%S') + "Z03:00"
+        return obj.created_at.isoformat().split(".")[0] + ".52+00:00"
 
     class Meta:
         model = Comment

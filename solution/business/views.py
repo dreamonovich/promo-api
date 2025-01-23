@@ -1,4 +1,7 @@
-from django.db.models import Q
+from datetime import datetime
+
+from django.db.models import Q, F, Value
+from django.db.models.functions import Coalesce
 from rest_framework import status
 from django.contrib.auth.hashers import make_password, check_password
 from rest_framework.exceptions import NotFound
@@ -107,7 +110,14 @@ class PromocodeCreateListView(GenericAPIView, CreateModelMixin, ListModelMixin):
 
             queryset = queryset.filter(country_filters)
 
-        return queryset.order_by(f"-{sort_by}")
+        if sort_by == "active_from":
+            order_field = Coalesce('active_from', Value(datetime.min))
+        elif sort_by == "active_until":
+            order_field = Coalesce('active_until', Value(datetime.max))
+        else:
+            order_field = F('created_at')
+
+        return queryset.annotate(sort_field=order_field).order_by(f"-sort_field")
 
     def perform_create(self, serializer):
         uuid = self.request.user.uuid
@@ -136,9 +146,24 @@ class RetrieveUpdatePromocodeView(RetrieveUpdateAPIView):
         if not is_valid_uuid(uuid):
             raise ValidationError("Invalid UUID.")
 
+        if not (promocode := Promocode.objects.filter(uuid=uuid).first()):
+            raise NotFound("Промокод не надйен.")
+
         for field in PromocodeSerializer.Meta.read_only_fields:
             if field in request.data:
                 raise ValidationError(f"Поле '{field}' не может быть изменено.")
+
+        if (max_count := request.data.get("max_count")) is not None:
+            if promocode.mode == "COMMON":
+                used_count = promocode.max_count - promocode.common_count
+                if used_count > max_count:
+                    raise ValidationError("max_count > used_count")
+
+            else:
+                if max_count != 1:
+                    raise ValidationError("max_count > 1")
+
+
         return super().update(request, *args, **kwargs)
 
 class PromocodeStatisticsView(APIView):

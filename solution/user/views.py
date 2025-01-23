@@ -93,7 +93,7 @@ class RetrieveUpdateUserView(APIView):
         )
         serializer.is_valid(raise_exception=True)
 
-        if password := serializer.validated_data.get('password'):
+        if (password := serializer.validated_data.get('password')):
             serializer.validated_data["password"] = make_password(password)
         serializer.save()
 
@@ -324,16 +324,16 @@ class RetrieveUpdateDeleteCommentView(APIView):
 
 
 def user_is_targeted(user_info: TargetInfo, promocode_target: Target) -> bool:
-    targeted_age_until = promocode_target.age_until
-    targeted_age_from = promocode_target.age_from
-    targeted_country = promocode_target.country
-    if targeted_age_until and user_info.age > targeted_age_until:
-        return False
-    if targeted_age_from and user_info.age < targeted_age_from:
-        return False
-    if targeted_country and user_info.country != targeted_country:
-        print("TARGETED COUNTRY IS", targeted_country)
-        return False
+    if promocode_target is not None:
+        targeted_age_until = promocode_target.age_until
+        targeted_age_from = promocode_target.age_from
+        targeted_country = promocode_target.country
+        if targeted_age_until is not None and user_info.age > targeted_age_until:
+            return False
+        if targeted_age_from is not None and user_info.age < targeted_age_from:
+            return False
+        if targeted_country is not None and user_info.country != targeted_country:
+            return False
     return True
 
 
