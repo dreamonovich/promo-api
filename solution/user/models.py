@@ -16,7 +16,12 @@ class TargetInfo(models.Model):
 class User(EmailPasswordUser):
     name = models.CharField(validators=[MinLengthValidator(1), MaxLengthValidator(100)], max_length=100)
     surname = models.CharField(validators=[MinLengthValidator(1), MaxLengthValidator(120)], max_length=120)
-    avatar_url = models.URLField(max_length=350, blank=True, null=True)
+    avatar_url = models.URLField(
+        max_length=350,
+        blank=True,
+        null=True,
+        validators=[MinLengthValidator(1), MaxLengthValidator(350)]
+    )
     other = models.OneToOneField(TargetInfo, on_delete=models.CASCADE)
 
     model_type = "user"

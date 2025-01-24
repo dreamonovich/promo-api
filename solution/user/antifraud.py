@@ -10,7 +10,7 @@ redis_conn = redis.Redis(
     host=REDIS_HOST,
     port=REDIS_PORT
 )
-# TODO редиска при перезагрузке сбросится
+
 def _get_user_cached_info(user_email: str) -> dict: # utc time
     user_cached_info = {}
     if byted_user_cached_info := redis_conn.get(user_email):

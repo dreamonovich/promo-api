@@ -4,7 +4,7 @@ from .views import RegisterBusinessView, LoginBusinessView, PromocodeCreateListV
     PromocodeStatisticsView
 
 urlpatterns = [
-    path("auth/sign-up", RegisterBusinessView.as_view()),
+    path("auth/sign-up", RegisterBusinessView.as_view(), name='business-sign-up'),
     path("auth/sign-in", LoginBusinessView.as_view()),
     path("promo", PromocodeCreateListView.as_view()),
     path("promo/<str:uuid>", RetrieveUpdatePromocodeView.as_view()),

@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 from app.pagination import PureLimitOffsetPagination
 from rest_framework.serializers import ValidationError
 
-from core.utils import is_valid_uuid
+from core.utils import is_valid_uuid, clean_country
 from business.models import Business, Promocode
 from business.permissions import IsBusinessAuthenticated, IsPromocodeOwner, get_business
 from business.serializers import RegisterBusinessSerializer, LoginBusinessSerializer, CreatePromocodeSerializer, \
@@ -68,15 +68,6 @@ class RegisterBusinessView(CreateAPIView):
             "company_id": business.uuid
         })
 
-def clean_country(country) -> list[str]:
-    if isinstance(country, str):
-        country = country.strip().split(',')
-    for country_item in country:
-        if len(country_item) != 2 or not isinstance(country_item, str):
-            raise ValidationError
-
-    return country
-
 class PromocodeCreateListView(GenericAPIView, CreateModelMixin, ListModelMixin):
     permission_classes = (IsBusinessAuthenticated,)
     pagination_class = PureLimitOffsetPagination
@@ -117,7 +108,7 @@ class PromocodeCreateListView(GenericAPIView, CreateModelMixin, ListModelMixin):
         else:
             order_field = F('created_at')
 
-        return queryset.annotate(sort_field=order_field).order_by(f"-sort_field")
+        return queryset.annotate(sort_field=order_field).order_by("-sort_field")
 
     def perform_create(self, serializer):
         uuid = self.request.user.uuid

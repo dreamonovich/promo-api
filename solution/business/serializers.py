@@ -1,16 +1,23 @@
 from collections import defaultdict
 
-from django.core.validators import MinLengthValidator, RegexValidator, MaxLengthValidator
+from django.core.validators import MinLengthValidator, RegexValidator, MaxLengthValidator, MinValueValidator, \
+    MaxValueValidator
 from rest_framework import serializers
 from drf_writable_nested.serializers import WritableNestedModelSerializer
+from rest_framework.exceptions import ValidationError
 
 from business.models import Business, Promocode, Target, password_length_validator, promocode_is_active, \
     PromocodeCommonInstance, PromocodeUniqueInstance, PromocodeUniqueActivation, PromocodeCommonActivation
-from core.serializers import ClearNullMixin
+from core.utils import clean_country
+from core.serializers import ClearNullMixin, StrictCharField, StrictIntegerField, StrictURLField
 from core.utils import validate_country_code
 
 
 class RegisterBusinessSerializer(serializers.ModelSerializer):
+    name = StrictCharField(
+        validators=[MinLengthValidator(5)],
+        max_length=50,
+    )
     class Meta:
         model = Business
         fields = ("name", "email", "password", "model_type")
@@ -19,7 +26,7 @@ class RegisterBusinessSerializer(serializers.ModelSerializer):
 
 class LoginBusinessSerializer(serializers.Serializer):
     email = serializers.EmailField(validators=[MinLengthValidator(8), MaxLengthValidator(120)])
-    password = serializers.CharField(
+    password = StrictCharField(
         write_only=True,
         validators=[
             MinLengthValidator(8),
@@ -32,10 +39,26 @@ class LoginBusinessSerializer(serializers.Serializer):
 
     class Meta:
         model = Business
-        fields = ("email", "password",) # TODO delete
+        fields = ("email", "password",) # delete maybe
 
 
 class TargetSerializer(serializers.ModelSerializer, ClearNullMixin):
+    age_from = StrictIntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        required=False,
+        allow_null=True,
+    )
+    age_until = StrictIntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        required=False,
+        allow_null=True,
+    )
+    categories = serializers.ListField(
+        child=StrictCharField(validators=[MinLengthValidator(2), MaxLengthValidator(20)], max_length=20),
+        max_length=20,
+        required=False,
+        allow_null=True,
+    )
     class Meta:
         model = Target
         fields = ['age_from', 'age_until', 'country', 'categories']
@@ -61,12 +84,26 @@ class TargetSerializer(serializers.ModelSerializer, ClearNullMixin):
 
 class CreatePromocodeSerializer(WritableNestedModelSerializer):
     target = TargetSerializer(required=True, allow_null=True)
-    promo_common = serializers.CharField(required=False, allow_null=True, min_length=5, max_length=30)
+    promo_common = StrictCharField(required=False, allow_null=True, min_length=5, max_length=30)
     promo_unique = serializers.ListField(
-        child=serializers.CharField(min_length=3, max_length=30),
+        child=StrictCharField(min_length=3, max_length=30),
         validators=[MinLengthValidator(1), MaxLengthValidator(5000)],
         required=False
     )
+    description = StrictCharField(
+        max_length=300,
+        validators=[
+            MinLengthValidator(10),
+            MaxLengthValidator(300),
+        ],
+    )
+    image_url = StrictURLField(
+        max_length=350,
+        required=False,
+        allow_null=True,
+        validators=[MinLengthValidator(1), MaxLengthValidator(350)]
+    )
+    max_count = StrictIntegerField(validators=[MinValueValidator(0), MaxValueValidator(100000000)])
 
     class Meta:
         model = Promocode
@@ -110,7 +147,8 @@ class CreatePromocodeSerializer(WritableNestedModelSerializer):
                 raise serializers.ValidationError(
                     {"max_count": "При mode=UNIQUE max_count может быть только 1."}
                 )
-
+        if data.get("image_url") == '':
+            raise ValidationError("image_url must not be empty")
         return super().validate(data)
 
     def create(self, validated_data):
@@ -159,11 +197,23 @@ class PromocodeSerializer(WritableNestedModelSerializer, ClearNullMixin):
     used_count = serializers.SerializerMethodField()
     promo_common = serializers.SerializerMethodField()
     promo_unique = serializers.SerializerMethodField()
-    active_from = serializers.SerializerMethodField()
-    active_until = serializers.DateTimeField(format="%Y-%m-%d", input_formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"], required=False)
+    active_until = serializers.DateTimeField(format="%Y-%m-%d", input_formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"], required=False, allow_null=True)
     active_from = serializers.DateTimeField(format="%Y-%m-%d", input_formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
-                                             required=False)
-
+                                             required=False, allow_null=True)
+    description = StrictCharField(
+        max_length=300,
+        validators=[
+            MinLengthValidator(10),
+            MaxLengthValidator(300),
+        ],
+    )
+    image_url = StrictURLField(
+        max_length=350,
+        required=False,
+        allow_null=True,
+        validators=[MinLengthValidator(1), MaxLengthValidator(350)]
+    )
+    max_count = StrictIntegerField(validators=[MinValueValidator(0), MaxValueValidator(100000000)])
 
     def get_promo_id(self, obj):
         return obj.uuid
@@ -235,7 +285,7 @@ class PromocodeSerializer(WritableNestedModelSerializer, ClearNullMixin):
         if 'active_until' in validated_data:
             instance.active_until = validated_data['active_until']
         if 'active_from' in validated_data:
-            instance.active_until = validated_data['active_from']
+            instance.active_from = validated_data['active_from']
         instance.save()
         return super().update(instance, validated_data)
 
@@ -251,7 +301,7 @@ class ListPromocodesQueryParamsSerializer(serializers.Serializer):
     )
 
     def validate_country(self, country):
-        validate_country_code(country)
+        validate_country_code(*clean_country(country))
 
 
 class PromocodeStatSeriazlier(serializers.ModelSerializer):

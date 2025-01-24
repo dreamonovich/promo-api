@@ -22,7 +22,6 @@ class Target(models.Model):
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         blank=True,
         null=True,
-
     )
     age_until = models.IntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
@@ -67,6 +66,7 @@ class Promocode(models.Model):
         max_length=350,
         blank=True,
         null=True,
+        validators=[MinLengthValidator(1), MaxLengthValidator(350)]
     )
     target = models.OneToOneField(Target, on_delete=models.CASCADE, null=True)
     max_count = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(100000000)])
@@ -115,7 +115,7 @@ def promocode_is_active(promocode, current_time=None):
         return False
 
     if promocode.mode == 'COMMON':
-        if promocode.common_count <= 0: # TODO Максимально количество использований, если mode = COMMON. Его можно редактировать, но если текущее количество активироваций превышает переданное значение, вернется ошибка. Если число активаций становится равным max_count, сервер переводит промокод в неактивное состояние (active = false). Если увеличить max_count для неактивного прокомода, он перейдёт в статус активного.
+        if promocode.common_count <= 0:
             return False
     elif promocode.mode == 'UNIQUE':
         if promocode.unique_count <= 0:

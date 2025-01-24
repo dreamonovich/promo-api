@@ -1,8 +1,5 @@
 from django.http import JsonResponse
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
-from rest_framework.response import Response
-
 
 class ValidateAuthTokenMiddleware:
     def __init__(self, get_response):
@@ -13,6 +10,6 @@ class ValidateAuthTokenMiddleware:
         if auth_header:
             token = auth_header.split(' ')[-1]
             if not (5 <= len(token) <= 300):
-                return JsonResponse({"error": 'Token must be between 5 and 300 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+                return JsonResponse({"error": 'Token must be between 5 and 300 characters.'}, status=status.HTTP_401_UNAUTHORIZED)
 
         return self.get_response(request)
