@@ -45,7 +45,7 @@ def antifraud_success(user_email: str, promocode_uuid: str) -> bool:
     cache_until = cached_info.get("cache_until")
     success = cached_info.get("success")
 
-    if cached_info is not None and not _is_cache_until_passed(cache_until):
+    if cache_until is not None and not _is_cache_until_passed(cache_until):
         return success
 
     antifraud_response = _get_antifraud_response(user_email, promocode_uuid)

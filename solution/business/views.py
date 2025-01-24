@@ -4,7 +4,7 @@ from django.db.models import Q, F, Value
 from django.db.models.functions import Coalesce
 from rest_framework import status
 from django.contrib.auth.hashers import make_password, check_password
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.generics import CreateAPIView, GenericAPIView, RetrieveUpdateAPIView
 from rest_framework.authtoken.models import Token
 from rest_framework.mixins import CreateModelMixin, ListModelMixin
@@ -154,7 +154,6 @@ class RetrieveUpdatePromocodeView(RetrieveUpdateAPIView):
                 if max_count != 1:
                     raise ValidationError("max_count > 1")
 
-
         return super().update(request, *args, **kwargs)
 
 class PromocodeStatisticsView(APIView):
@@ -167,6 +166,9 @@ class PromocodeStatisticsView(APIView):
 
         if not (promocode := Promocode.objects.filter(uuid=uuid).first()):
             raise NotFound("Промокод не надйен.")
+
+        if not promocode.company == get_business(self.request.user.uuid):
+            raise PermissionDenied("низя")
 
         response_data = PromocodeStatSeriazlier(promocode).data
         return Response(response_data)
